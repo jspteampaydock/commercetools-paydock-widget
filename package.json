@@ -1,0 +1,33 @@
+{
+  "name": "@paydock-commercetools/paydock",
+  "keywords": [
+    "paydock",
+    "paydock-commercetools",
+    "checkout",
+    "payment",
+    "payments",
+    "components"
+  ],
+  "version": "1.2.16",
+  "description": "Widget for create payment methods",
+  "main": "dist/widget.js",
+  "files": [
+    "dist/*.js",
+    "dist/*.css",
+    "dist/**/*.png"
+  ],
+  "private": false,
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://gitlab.com/jsp8795506/paydock-commercetools-npm.git"
+  },
+  "author": "JSP",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://gitlab.com/jsp8795506/paydock-commercetools-npm/issues"
+  },
+  "homepage": "https://gitlab.com/jsp8795506/paydock-commercetools-npm#readme"
+}
