@@ -224,10 +224,18 @@
     display: flex;
     align-items: center;
 }
-.paydock-widget_head label i {
+.paydock-widget_head label i,
+.paydock-widget_body .method-description {
     font-style: normal;
     font-size: 14px;
+    line-height: 20px;
     margin: 0;
+}
+.paydock-widget_head label i {
+    font-weight: 500;
+}
+.paydock-widget_body .method-description {
+    font-weight: 400;
 }
 .paydock-widget_head:not(.active) label {
     cursor: pointer;

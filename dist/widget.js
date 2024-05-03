@@ -3,8 +3,13 @@ export default class PaydockCommercetoolWidget {
 
     // static API_URL = 'http://localhost:3003';
 
-    constructor({selector, type, userId, paymentButtonSelector, radioGroupName}) {
+    constructor({selector, type, configuration, userId, paymentButtonSelector, radioGroupName}) {
         this.selector = selector;
+        this.type = type;
+        this.configuration = configuration;
+        this.userId = userId || 0;
+        this.paymentButtonSelector = paymentButtonSelector;
+        this.radioGroupName = radioGroupName;
         this.wallets = ['apple-pay', 'google-pay', 'afterpay_v2', 'paypal_smart'];
         this.apims = ['zippay', 'afterpay_v1'];
         this.billingInfoFields = [
@@ -28,13 +33,10 @@ export default class PaydockCommercetoolWidget {
             'amount'
         ];
         this.canvasSelector = '#paydock-widget-container-3ds';
-        this.type = type;
-        this.userId = userId || 0;
         this.amount = 0;
         this.currency = 'AUD';
         this.preChargeWalletToken = null;
         this.paymentButtonElem = null;
-        this.configuration = null;
         this.country = null;
         this.widget = null;
         this.canvas = null;
@@ -42,17 +44,23 @@ export default class PaydockCommercetoolWidget {
         this.paymentSource = undefined;
         this.sleepSetTimeout_ctrl = undefined;
         this.saveCard = false;
-        this.paymentButtonSelector = paymentButtonSelector;
         this.spinner = null;
         this.overlay = null;
         this.additionalInfo = undefined;
-        this.radioGroupName = radioGroupName;
         this.isValidForm = false;
         this.wasInit = false;
         this.billingInfo = {};
         this.shippingInfo = {};
         this.cartItems = [];
         this.referenceId = null;
+        this.paymentId = configuration.paymentId;
+        this.accessToken = null;
+
+        if('credentials' === this.configuration.api_credentials.credentials_type){
+            this.accessToken = this.configuration.api_credentials.credentials_public_key
+        }else{
+            this.accessToken = this.configuration.api_credentials.credentials_widget_access_key
+        }
     }
 
     setBillingInfo(data) {
@@ -113,7 +121,68 @@ export default class PaydockCommercetoolWidget {
 
         return result;
     }
+    getMetaData(full = false) {
+        const charge = {
+            amount: this.amount,
+            currency: this.currency,
+            email: this.billingInfo.email,
+            first_name: this.billingInfo.first_name,
+            last_name: this.billingInfo.last_name,
+            billing_address: {
+                first_name: this.billingInfo.first_name,
+                last_name: this.billingInfo.last_name,
+                line1: this.billingInfo.address_line1,
+                line2: this.billingInfo.address_line2,
+                country: this.billingInfo.address_country,
+                postcode: this.billingInfo.address_postcode,
+                city: this.billingInfo.address_city,
+                state: this.billingInfo.address_state
+            },
+            shipping_address: {
+                first_name: this.shippingInfo.first_name ?? this.billingInfo.first_name,
+                last_name: this.shippingInfo.last_name ?? this.billingInfo.last_name,
+                line1: this.shippingInfo.address_line1 ?? this.billingInfo.address_line1,
+                line2: this.shippingInfo.address_line2 ?? this.billingInfo.address_line2,
+                country: this.shippingInfo.address_country ?? this.billingInfo.address_country,
+                postcode: this.shippingInfo.address_postcode ?? this.billingInfo.address_postcode,
+                city: this.shippingInfo.address_city ?? this.billingInfo.address_city,
+                state: this.shippingInfo.address_state ?? this.billingInfo.address_state
+            },
+            items: this.cartItems.map(item => {
+                return {
+                    name: item.name,
+                    amount: item.amount,
+                    quantity: item.quantity,
+                    reference: item.item_uri,
+                    image_uri: item.image_uri
+                }
+            })
+        };
 
+        let meta = {};
+
+        if (full) {
+            meta = {
+                amount: this.amount,
+                currency: this.currency,
+                email: this.billingInfo.email,
+                first_name: this.billingInfo.first_name,
+                last_name: this.billingInfo.last_name,
+                address_line: this.billingInfo.address_line,
+                address_line2: this.billingInfo.address_line2,
+                address_city: this.billingInfo.address_city,
+                address_state: this.billingInfo.address_state,
+                address_postcode: this.billingInfo.address_postcode,
+                address_country: this.billingInfo.address_country,
+                phone: this.billingInfo.phone
+            }
+        }
+
+        meta['charge'] = charge;
+
+        return meta;
+
+    }
     afterpayError() {
 
     }
@@ -200,78 +269,42 @@ export default class PaydockCommercetoolWidget {
 
     setSpinner(containerSelector) {
         const container = document.querySelector(containerSelector || this.paymentButtonSelector);
-        if (container) {
+        if (!container) return;
+        if (!container.querySelector('.widget-spinner')) {
             this.spinner = document.createElement('div');
             this.spinner.classList.add('widget-spinner');
-            if (container.tagName.toLowerCase() === 'body') {
-                this.overlay = document.createElement('div');
-                this.overlay.classList.add('widget-overlay');
-                this.overlay.appendChild(this.spinner);
-                container.appendChild(this.overlay);
-                return;
-            }
-            container.classList.add('widget-set-disabled');
-            container.appendChild(this.spinner);
         }
+        if (container.tagName.toLowerCase() === 'body') {
+            this.overlay = document.createElement('div');
+            this.overlay.classList.add('widget-overlay');
+            this.overlay.appendChild(this.spinner);
+            container.appendChild(this.overlay);
+            return;
+        }
+        container.classList.add('widget-set-disabled');
+        container.appendChild(this.spinner);
     }
 
     removeSpinner(containerSelector) {
-        const container = document.querySelector(containerSelector);
+        const container = document.querySelector(containerSelector || this.paymentButtonSelector);
+        container.classList.remove('widget-set-disabled');
+
         if ('#' + container.id === this.paymentButtonSelector) {
-            container.classList.remove('widget-set-disabled');
             const spinnerElement = container.querySelector('.widget-spinner');
             if (spinnerElement) spinnerElement.remove();
             return
         }
-        if (this.spinner && this.spinner.parentNode && container) {
-            this.spinner.parentNode.removeChild(this.spinner);
+        if (this.spinner && container.contains(this.spinner)) {
+            this.spinner.remove();
             this.spinner = null;
-            if (this.overlay && this.overlay.parentNode && container.tagName.toLowerCase() === 'body') {
-                this.overlay.parentNode.removeChild(this.overlay);
+            if (this.overlay && container.tagName.toLowerCase() === 'body') {
+                this.overlay.remove();
                 this.overlay = null;
             }
-            container.classList.remove('widget-set-disabled');
         }
     }
 
-    loadPayDockScript() {
-        return new Promise((resolve, reject) => {
-            const scriptDOM = document.querySelector('script[src="https://widget.paydock.com/sdk/latest/widget.umd.js"]');
-            if (scriptDOM) return resolve();
-
-            const script = document.createElement('script');
-            script.src = "https://widget.paydock.com/sdk/latest/widget.umd.js";
-            script.onload = resolve;
-            script.onerror = reject;
-            document.head.appendChild(script);
-        });
-    }
-
-    fetchData() {
-        return new Promise((resolve, reject) => {
-            fetch(PaydockCommercetoolWidget.API_URL + '/get-widget-data?' + new URLSearchParams({
-                clientId: 1,
-                userId: this.userId
-            }))
-                .then(response => {
-                    if (!response.ok) {
-                        throw new Error(`HTTP error! status: ${response.status}`);
-                    }
-                    return response.json();
-                })
-                .then(response => {
-                    this.configuration = response.data;
-                    resolve();
-                })
-                .catch(error => {
-                    console.error('Could not fetch data:', error);
-                    reject(error);
-                });
-        });
-    }
-
     displayPaymentMethods(paymentMethod) {
-        console.log(paymentMethod);
         const methodsContainer = document.querySelector('#paydock-widget-container');
         if (!methodsContainer) {
             console.error("Container for payment methods not found");
@@ -343,8 +376,20 @@ export default class PaydockCommercetoolWidget {
         };
         label.addEventListener('click', handlePaymentMethodClick);
         methodHead.appendChild(label);
+        let title = '';
 
-        const methodName = document.createTextNode(paymentMethod.description);
+        if (this.wallets.includes(this.type)) {
+            let methodSlug = ('paypal_smart' === this.type) ? 'paypal' : this.type.replace('-', '_');
+            let key = 'payment_methods_wallets_' + methodSlug + '_title';
+            title = this.configuration.widget_configuration.payment_methods.wallets[key];
+        } else if (this.apims.includes(this.type)) {
+            let methodSlug = ('zippay' === this.type) ? 'zip' : this.type.replace('-', '_');
+            let key = 'payment_methods_alternative_payment_method_' + methodSlug + '_title';
+            title = this.configuration.widget_configuration.payment_methods.alternative_payment_methods[key];
+        } else {
+            title = paymentMethod.title
+        }
+        const methodName = document.createTextNode(title);
         const italicElement = document.createElement('i');
         italicElement.appendChild(methodName);
         label.appendChild(italicElement);
@@ -353,6 +398,15 @@ export default class PaydockCommercetoolWidget {
 
         const methodBody = document.createElement('div');
         methodBody.classList.add('paydock-widget_body', 'hide');
+
+        const getDescription = this.configuration.payment_methods[this.type]?.description;
+        if (getDescription !== undefined && getDescription.trim() !== "") {
+            const methodDescriptionWrapper = document.createElement('div');
+            methodDescriptionWrapper.classList.add('method-description');
+            const methodDescriptionText = document.createTextNode(getDescription);
+            methodDescriptionWrapper.appendChild(methodDescriptionText);
+            methodBody.appendChild(methodDescriptionWrapper);
+        }
 
         const widgetWrapper = document.createElement('div');
         widgetWrapper.setAttribute('id', paymentMethod.name);
@@ -384,17 +438,18 @@ export default class PaydockCommercetoolWidget {
     }
 
     async createWidget() {
-
         const widgetContainer = document.querySelector(this.selector);
+        const configMethod = this.configuration.payment_methods[this.type].config;
+        const configStyle = this.configuration.widget_configuration.widget_style;
 
         if (this.widget !== null) return;
 
         if (this.type === 'bank_accounts') {
-            const bankAccount = new paydock.Configuration(this.configuration.bank_accounts_gateway_id, 'bank_account');
+            const bankAccount = new paydock.Configuration(configMethod.bank_accounts_gateway_id, 'bank_account');
 
             bankAccount.setFormFields(['account_routing', 'address_country', 'address_postcode', 'address_state', 'address_city', 'address_line1', 'address_line2', 'email']);
 
-            this.widget = new paydock.HtmlMultiWidget(this.selector, this.configuration.credentials_public_key, [bankAccount]);
+            this.widget = new paydock.HtmlMultiWidget(this.selector, this.accessToken, [bankAccount]);
 
             this.widget.onFinishInsert('input[name="payment_source_bank_accounts_token"]', 'payment_source');
 
@@ -402,12 +457,12 @@ export default class PaydockCommercetoolWidget {
             if (inputHidden === null) widgetContainer.insertAdjacentHTML('afterend', '<input type="hidden" name="payment_source_bank_accounts_token">')
         }
         if (this.type === 'card') {
-            let isPermanent = this.configuration.card_3ds !== 'Disable' && this.configuration.card_3ds_flow === 'With OTT'
+            let isPermanent = configMethod.card_3ds !== 'Disable' && configMethod.card_3ds_flow === 'With OTT'
 
-            let gatewayId = isPermanent ? this.configuration.card_gateway_id : 'not_configured';
+            let gatewayId = isPermanent ? configMethod.card_gateway_id : 'not_configured';
 
-            this.widget = new paydock.HtmlWidget(this.selector, this.configuration.credentials_public_key, gatewayId);
-            const supportedCardIcons = this.configuration.card_supported_card_schemes.map(item => item.value.toLowerCase());
+            this.widget = new paydock.HtmlWidget(this.selector, this.accessToken, gatewayId);
+            const supportedCardIcons = configMethod.card_supported_card_schemes.map(item => item.value.toLowerCase());
             this.widget.setSupportedCardIcons(supportedCardIcons);
 
             this.widget.setFormFields(['address_country', 'address_postcode', 'address_state', 'address_city', 'address_line1', 'address_line2', 'email']);
@@ -430,14 +485,25 @@ export default class PaydockCommercetoolWidget {
             });
 
             this.widget.setStyles({
-                background_color: this.configuration.widget_style_bg_color,
-                text_color: this.configuration.widget_style_text_color,
-                border_color: this.configuration.widget_style_border_color,
-                error_color: this.configuration.widget_style_error_color,
-                success_color: this.configuration.widget_style_success_color,
-                font_size: this.configuration.widget_style_font_size,
-                font_family: this.configuration.widget_style_font_family
+                background_color: configStyle.widget_style_bg_color,
+                text_color: configStyle.widget_style_text_color,
+                border_color: configStyle.widget_style_border_color,
+                error_color: configStyle.widget_style_error_color,
+                success_color: configStyle.widget_style_success_color,
+                font_size: configStyle.widget_style_font_size,
+                font_family: configStyle.widget_style_font_family
             });
+
+            if (configStyle.widget_style_custom_element !== undefined && configStyle.widget_style_custom_element.trim() !== "") {
+                let elementCustomStyles;
+                elementCustomStyles = JSON.parse(widgetCustomStyles);
+
+                this.widget.setElementStyle('input', elementCustomStyles?.input);
+                this.widget.setElementStyle('label', elementCustomStyles?.label);
+                this.widget.setElementStyle('title', elementCustomStyles?.title);
+                this.widget.setElementStyle('title_description', elementCustomStyles?.title_description);
+            }
+
             this.widget.interceptSubmitForm(this.selector);
             this.widget.load();
         }
@@ -447,6 +513,7 @@ export default class PaydockCommercetoolWidget {
     async initAPIMSButtons(type) {
 
         const widgetContainer = document.querySelector(this.selector);
+        const configMethod = this.configuration.payment_methods[this.type].config;
 
         if (this.widget !== null) return;
         this.setSpinner(this.selector);
@@ -455,30 +522,18 @@ export default class PaydockCommercetoolWidget {
         if (type === 'zippay') {
             const htmlBtnElem = document.querySelector('#paydockAPMsZipButton');
             if (htmlBtnElem === null) widgetContainer.insertAdjacentHTML('afterBegin', '<div align="center" id="paydockAPMsZipButton"></button>');
-            this.widget = new paydock.ZipmoneyCheckoutButton(this.selector, this.configuration.credentials_public_key, this.configuration.alternative_payment_methods_zippay_gateway_id);
-            meta = {
-                charge: {
-                    amount: this.amount,
-                    currency: this.currency,
-                }
-            }
+            this.widget = new paydock.ZipmoneyCheckoutButton(this.selector, this.accessToken, configMethod.alternative_payment_methods_zippay_gateway_id);
         } else {
             const htmlBtnElem = document.querySelector('#paydockAPMsAfterpayButton');
             if (htmlBtnElem === null) widgetContainer.insertAdjacentHTML('afterBegin', '<div align="center" id="paydockAPMsAfterpayButton"></div>');
-            this.widget = new paydock.AfterpayCheckoutButton(this.selector, this.configuration.credentials_public_key, this.configuration.alternative_payment_methods_afterpay_v1_gateway_id);
-            meta = {
-                amount: this.amount,
-                currency: this.currency,
-                email: this.additionalInfo?.email ?? '',
-                first_name: this.additionalInfo?.firstName ?? '',
-                last_name: this.additionalInfo?.lastName ?? ''
-            }
+            this.widget = new paydock.AfterpayCheckoutButton(this.selector, '7dbe73201da9bea98fef73e44a73f8cbda42e508', '65a915ffbb599fddd1c46dc4');
         }
         if (this.widget) {
+            console.log('work')
             const inputHidden = document.querySelector('[name="payment_source_apm_token"]');
             if (inputHidden === null) widgetContainer.insertAdjacentHTML('afterend', '<input type="hidden" name="payment_source_apm_token">')
             this.widget.onFinishInsert('input[name="payment_source_apm_token"]', 'payment_source_token');
-            this.widget.setMeta(meta);
+            this.widget.setMeta(this.getMetaData('afterpay_v1' === type));
             this.widget.on('finish', () => {
                 if (this.paymentButtonElem) {
                     this.paymentButtonElem.click();
@@ -511,7 +566,7 @@ export default class PaydockCommercetoolWidget {
         this.setSpinner(this.selector);
         if (!this.preChargeWalletToken && !this.checkIfAfterpayAfterRedirect()) {
             this.preChargeWalletToken = await this.createPreChargeWalletToken();
-        } else if(this.checkIfAfterpayIsSuccess()) {
+        } else if (this.checkIfAfterpayIsSuccess()) {
             return;
         }
         let widget = null;
@@ -520,18 +575,18 @@ export default class PaydockCommercetoolWidget {
             case  'apple-pay':
                 widget = new paydock.WalletButtons(this.selector, this.preChargeWalletToken, {
                     amount_label: "Total",
-                    country: 'AU', //@TODO: remove, need for test.
-                    wallets: ["apple"]
+                    show_billing_address: true,
+                    country: this.billingInfo.address_country,
+                    wallets: ["apple"],
                 });
-                console.log('selector: ' + this.selector)
                 break;
             case  'google-pay':
                 widget = new paydock.WalletButtons(this.selector, this.preChargeWalletToken, {
                     amount_label: "Total",
-                    country: this.country,
-                    wallets: ["google"]
+                    show_billing_address: true,
+                    country: this.billingInfo.address_country,
+                    wallets: ["google"],
                 });
-                console.log('selector: ' + this.selector)
                 break;
             case  'afterpay_v2':
                 window.localStorage.setItem('paydock_afterpay_v2_billing_address', JSON.stringify(this.billingInfo))
@@ -539,7 +594,7 @@ export default class PaydockCommercetoolWidget {
                 window.localStorage.setItem('paydock_afterpay_v2_cart_items', JSON.stringify(this.cartItems))
                 widget = new paydock.WalletButtons(this.selector, this.preChargeWalletToken, {
                     amount_label: this.amount,
-                    country: 'AU',
+                    country: this.billingInfo.address_country,
                 });
                 break;
             case  'paypal_smart':
@@ -547,19 +602,23 @@ export default class PaydockCommercetoolWidget {
                     request_shipping: true,
                     pay_later: false,
                     standalone: false,
-                    country: this.country,
+                    country: this.billingInfo.address_country,
                 });
                 break;
             default:
                 widget = null;
         }
 
-        console.log('widget: ', this.widget)
         if (widget) {
             widget.setEnv('sandbox');
             widget.onUnavailable(() => console.log("No wallet buttons available"));
             widget.onPaymentError((data) => console.log("The payment was not successful"));
-            widget.onPaymentInReview((data) => console.log("onPaymentInReview" + data));
+            widget.onPaymentInReview((result) => {
+                document.querySelector('[name="' + paymentSourceInput + '"]').value = JSON.stringify(result);
+                if (this.paymentButtonElem) {
+                    this.paymentButtonElem.click();
+                }
+            });
             widget.load();
 
             this.widget = widget;
@@ -580,6 +639,7 @@ export default class PaydockCommercetoolWidget {
     }
 
     async process() {
+        const configMethod = this.configuration.payment_methods[this.type].config;
         const checkboxName = this.type === 'card' ? 'saveCard' : 'saveBA';
         const checkbox = document.querySelector(`input[name="${checkboxName}"]`);
         if (checkbox) {
@@ -589,9 +649,9 @@ export default class PaydockCommercetoolWidget {
         let result = {success: true};
 
         if (this.type === 'card') {
-            if (['In-built 3DS', 'Standalone 3DS'].includes(this.configuration.card_3ds)) {
+            if (['In-built 3DS', 'Standalone 3DS'].includes(configMethod.card_3ds)) {
                 let charge3dsId;
-                if (this.configuration.card_3ds === 'In-built 3DS') {
+                if (configMethod.card_3ds === 'In-built 3DS') {
                     charge3dsId = await this.initCardInBuild3Ds(this.saveCard);
                 } else {
                     charge3dsId = await this.initCardStandalone3Ds();
@@ -621,34 +681,100 @@ export default class PaydockCommercetoolWidget {
 
 
     async createPreChargeWalletToken() {
-        const data = {
-            wallet: this.type,
-            amount: this.amount,
-            currency: this.currency,
-            reference: this.referenceId,
-            additionalInfo: {
-                billingInfo: this.billingInfo,
-                shippingInfo: this.shippingInfo,
-                items: this.cartItems
+        let currentMethod = this.configuration.payment_methods[this.type];
+        if (!currentMethod) {
+            throw Error('Unexpected method.')
+        }
+
+        let methodConfigSlug = ('paypal_smart' === this.type) ? 'paypal_smart_button' : this.type.replace('-', '_');
+
+        let billingLine2 = this?.billingInfo?.address_line2 ?? this?.billingInfo?.address_line1;
+        let shippingLine2 = this?.shippingInfo?.address_line2 ?? this?.shippingInfo?.address_line1;
+
+        let data = {
+            customer: {
+                first_name: this.billingInfo?.first_name,
+                last_name: this?.billingInfo?.last_name,
+                email: this?.billingInfo?.email,
+                phone: this?.billingInfo?.phone,
             },
-            checkoutPage: window.location.href
+            amount: this.amount,
+            reference: this.paymentId,
+            currency: this.currency,
+            meta: {
+                store_name: "Commercetools",
+            },
+            shipping: {
+                address_line1: (this.shippingInfo?.address_line1) ?? this?.billingInfo?.address_line1,
+                address_line2: shippingLine2 ?? billingLine2,
+                address_city: this?.shippingInfo?.address_city ?? this?.billingInfo?.address_city,
+                address_state: this?.shippingInfo?.address_state ?? this?.billingInfo?.address_state,
+                address_country: this?.shippingInfo?.address_country ?? this?.billingInfo?.address_country,
+                address_postcode: this?.shippingInfo?.address_postcode ?? this?.billingInfo?.address_postcode,
+                contact: {
+                    first_name: this?.shippingInfo?.first_name ?? this?.billingInfo?.first_name,
+                    last_name: this?.shippingInfo?.last_name ?? this?.billingInfo?.last_name,
+                    email: this?.shippingInfo?.email ?? this?.billingInfo?.email,
+                    phone: this?.shippingInfo?.phone ?? this?.billingInfo?.phone,
+                },
+            },
+            items: this.cartItems ?? []
         };
 
+        let paymentSource = {
+            gateway_id: currentMethod.config["wallets_" + methodConfigSlug + '_gateway_id'],
+            address_line1: this?.billingInfo?.address_line1,
+            address_line2: billingLine2,
+            address_city: this?.billingInfo?.address_city,
+            address_state: this?.billingInfo?.address_state,
+            address_country: this?.billingInfo?.address_country,
+            address_postcode: this?.billingInfo?.address_postcode,
+        }
+        if ('apple-pay' === currentMethod.type) {
+            paymentSource['wallet_type'] = 'apple';
+        } else if ('afterpay_v2' === currentMethod.type) {
+            data['meta']['success_url'] = checkoutPage + '?afterpay=true&success=true&cart=' + reference;
+            data['meta']['error_url'] = checkoutPage + '?afterpay=true&success=false';
+        }
+
+        data['customer']['payment_source'] = paymentSource;
+
+        if (('Enable' === currentMethod.config["wallets_" + methodConfigSlug + '_fraud'])
+            && currentMethod.config["wallets_" + methodConfigSlug + '_fraud_service_id']) {
+            data['fraud'] = {
+                service_id: currentMethod.config["wallets_" + methodConfigSlug + '_fraud_service_id'],
+                data: {}
+            }
+        }
+
         try {
-            const response = await fetch(PaydockCommercetoolWidget.API_URL + '/create-pre-charge-wallet-token', {
+            let response = await this.fetchWithToken(`${this.configuration.api_commercetools.url}${this.configuration.paymentId}`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                 },
-                body: JSON.stringify(data)
+                body: JSON.stringify({
+                    version: this.configuration.paymentVersion,
+                    actions: [{
+                        action: "setCustomField",
+                        name: "PaymentExtensionRequest",
+                        value: JSON.stringify({
+                            action: "makePreChargeResponse",
+                            request: {
+                                data,
+                                capture: 'Enable' === currentMethod.config["wallets_" + methodConfigSlug + '_direct_charge']
+                            }
+                        })
+                    }]
+                }),
             });
 
 
-            const responseData = await response.json();
+            let responseData = await response.json();
+            responseData = JSON.parse(responseData?.custom?.fields?.PaymentExtensionResponse);
 
             if (responseData.status === "Success" && responseData.token) {
                 this.preChargeWalletToken = responseData.token;
-                this.country = responseData.country;
                 window.localStorage.setItem('paydock-charge-id', responseData.chargeId)
                 return this.preChargeWalletToken;
             } else {
@@ -664,12 +790,31 @@ export default class PaydockCommercetoolWidget {
         return this.vaultToken !== undefined
     }
 
+    async fetchWithToken(url, options) {
+        return fetch(url, {
+            ...options,
+            headers: {
+                ...options.headers,
+                authorization: `Bearer ${this.configuration.api_commercetools.token}`,
+            },
+        }).then(
+            (response) => {
+                return response;
+            },
+            (error) => {
+                return Promise.reject(error);
+            }
+        );
+    }
+
     async getVaultToken() {
+        const configMethod = this.configuration.payment_methods[this.type].config;
+
         if (this.vaultToken !== undefined) {
             return this.vaultToken;
         }
 
-        if (this.configuration.card_3ds === 'In-built 3DS' && this.configuration.card_3ds_flow === 'With OTT') {
+        if (configMethod.card_3ds === 'In-built 3DS' && configMethod.card_3ds_flow === 'With OTT') {
             return this.paymentSource;
         }
 
@@ -684,23 +829,34 @@ export default class PaydockCommercetoolWidget {
             data.address_city = this.additionalInfo.address_city ?? '';
             data.address_state = this.additionalInfo.address_state ?? '';
             data.address_line1 = this.additionalInfo.address_line ?? '';
-            data.address_line2 = this.additionalInfo.address_line2.length ? this.additionalInfo.address_line2 : (this.additionalInfo.address_line ?? '');
+            data.address_line2 = this.additionalInfo.address_line2 ?? (this.additionalInfo.address_line ?? '');
 
-            const response = await fetch(PaydockCommercetoolWidget.API_URL + '/create-vault-token-by-ott', {
+            let response = await this.fetchWithToken(`${this.configuration.api_commercetools.url}${this.configuration.paymentId}`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                 },
                 body: JSON.stringify({
-                    saveCard: this.saveCard,
-                    type: this.type,
-                    userId: this.userId,
-                    clientId: 1, // TODO remove hardcode
-                    data
-                })
+                    version: this.configuration.paymentVersion,
+                    actions: [{
+                        action: "setCustomField",
+                        name: "getVaultTokenRequest",
+                        value: JSON.stringify({
+                            data,
+                            userId: this.userId,
+                            saveCard: this.saveCard,
+                            type: this.type
+                        })
+                    }]
+                }),
             });
 
-            const responseData = await response.json();
+            let responseData = await response.json();
+            console.log(`get vault token RESPONSE: ${JSON.stringify(responseData)}`);
+            responseData = responseData?.custom?.fields?.getVaultTokenResponse;
+            if (responseData) {
+                responseData = JSON.parse(responseData);
+            }
 
             if (responseData.status === "Success" && responseData.token) {
                 this.vaultToken = responseData.token;
@@ -710,62 +866,19 @@ export default class PaydockCommercetoolWidget {
             }
         } catch (error) {
             // this.removeSpinner(this.selector);
-            
-            console.error('Error:', error);
-            throw error;
-        }
-    }
 
-    async cardInBuild3DsPreAuth() {
-        try {
-            const data = {
-                amount: this.amount,
-                currency: "AUD", //this.currency
-                token: this.paymentSource,
-                customer: {
-                    first_name: this.additionalInfo?.billing_first_name ?? '',
-                    last_name: this.additionalInfo?.billing_last_name ?? '',
-                    email: this.additionalInfo?.billing_email ?? '',
-                    phone: this.additionalInfo?.billing_phone ?? '',
-                    payment_source: {
-                        address_line1: this.additionalInfo?.address_line ?? '',
-                        address_line2: this.additionalInfo?.address_line2 ?? '',
-                        address_city: this.additionalInfo?.address_city ?? '',
-                        address_postcode: this.additionalInfo?.address_postcode ?? '',
-                        address_state: this.additionalInfo?.address_state ?? '',
-                        address_country: this.additionalInfo?.address_country ?? '',
-                    }
-                },
-                _3ds: {}
-            };
-
-            const response = await fetch(PaydockCommercetoolWidget.API_URL + '/create-in-build-3ds-token', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify(data)
-            });
-
-            const responseData = await response.json();
-
-            if (responseData.status === "Success" && responseData.chargeId) {
-                return responseData.chargeId;
-            } else {
-                throw new Error(responseData.message || 'Error');
-            }
-        } catch (error) {
             console.error('Error:', error);
             throw error;
         }
     }
 
     async initCardInBuild3Ds(forcePermanentVault = false) {
+        const configMethod = this.configuration.payment_methods[this.type].config;
         let result = false;
         const widgetContainer = document.querySelector(this.selector);
         const canvasContainer = document.querySelector(this.canvasSelector);
 
-        if (this.vaultToken === undefined && (this.configuration.card_3ds_flow === 'With vault' || forcePermanentVault)) {
+        if (this.vaultToken === undefined && (configMethod.card_3ds_flow === 'With vault' || forcePermanentVault)) {
             this.vaultToken = await this.getVaultToken();
         }
 
@@ -776,18 +889,18 @@ export default class PaydockCommercetoolWidget {
             currency: 'AUD', // this.currency
         };
 
-        if (this.configuration.card_3ds_flow === 'With vault' || forcePermanentVault) {
+        if (configMethod.card_3ds_flow === 'With vault' || forcePermanentVault) {
             preAuthData.customer = {
                 payment_source: {
                     vault_token: this.vaultToken,
-                    gateway_id: this.configuration.card_gateway_id
+                    gateway_id: configMethod.card_gateway_id
                 }
             }
         } else {
             preAuthData.token = this.paymentSource
         }
 
-        const preAuthResp = await new paydock.Api(this.configuration.credentials_public_key)
+        const preAuthResp = await new paydock.Api(this.accessToken)
             .setEnv(envVal)
             .charge()
             .preAuth(preAuthData);
@@ -862,6 +975,7 @@ export default class PaydockCommercetoolWidget {
     }
 
     async getStandalone3dsToken() {
+        const configMethod = this.configuration.payment_methods[this.type].config;
         try {
             const currentDate = new Date();
             let payment_source = {
@@ -869,8 +983,8 @@ export default class PaydockCommercetoolWidget {
                 address_state: 'QLD', // TODO hadrcode
             }
 
-            if (this.configuration.card_gateway_id) {
-                payment_source.gateway_id = this.configuration.card_gateway_id;
+            if (configMethod.card_gateway_id) {
+                payment_source.gateway_id = configMethod.card_gateway_id;
             }
 
             const data = {
@@ -884,7 +998,7 @@ export default class PaydockCommercetoolWidget {
                     payment_source: payment_source
                 },
                 _3ds: {
-                    service_id: this.configuration.card_3ds_service_id ?? '',
+                    service_id: configMethod.card_3ds_service_id ?? '',
                     authentication: {
                         type: "01",
                         date: currentDate.toISOString()
@@ -892,15 +1006,27 @@ export default class PaydockCommercetoolWidget {
                 }
             };
 
-            const response = await fetch(PaydockCommercetoolWidget.API_URL + '/create-standalone-3ds-token', {
+            let response = await this.fetchWithToken(`${this.configuration.api_commercetools.url}${this.configuration.paymentId}`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                 },
-                body: JSON.stringify(data)
+                body: JSON.stringify({
+                    version: this.configuration.paymentVersion,
+                    actions: [{
+                        action: "setCustomField",
+                        name: "getStandalone3dsTokenRequest",
+                        value: JSON.stringify(data)
+                    }]
+                }),
             });
 
-            const responseData = await response.json();
+            let responseData = await response.json();
+            console.log(`get vault token RESPONSE: ${JSON.stringify(responseData)}`);
+            responseData = responseData?.custom?.fields?.getStandalone3dsTokenResponse;
+            if (responseData) {
+                responseData = JSON.parse(responseData);
+            }
 
             if (responseData.status === "Success" && responseData.token) {
                 return responseData.token;
@@ -1067,27 +1193,20 @@ export default class PaydockCommercetoolWidget {
         this.widget.on('afterLoad', () => {
             widgetContainer.appendChild(checkbox);
             checkbox.querySelector('input').addEventListener('change', (e) => {
-                console.log(`checkbox ${this.type} value: ${e.currentTarget.checked}`)
                 this.saveCard = e.currentTarget.checked;
             });
         });
     }
 
     isSaveCardEnable() {
-        return (this.type === 'bank_accounts' && this.configuration.bank_accounts_bank_account_save === 'Enable') ||
-            (this.type === 'card' && this.configuration.card_card_save === 'Enable');
+        const configMethod = this.configuration.payment_methods[this.type].config;
+
+        return (this.type === 'bank_accounts' && configMethod.bank_accounts_bank_account_save === 'Enable') ||
+            (this.type === 'card' && configMethod.card_card_save === 'Enable');
     }
 
     async loadWidget() {
-        try {
-            await this.loadPayDockScript();
-            await this.fetchData();
-            if (['bank_accounts', 'card'].includes(this.type)) {
-                this.createWidget();
-            }
-        } catch (error) {
-            console.error(error);
-        }
+        if (['bank_accounts', 'card'].includes(this.type)) this.createWidget();
     }
 }
 
