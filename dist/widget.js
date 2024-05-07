@@ -377,17 +377,25 @@ export default class PaydockCommercetoolWidget {
         label.addEventListener('click', handlePaymentMethodClick);
         methodHead.appendChild(label);
         let title = '';
-
+        let description = '';
         if (this.wallets.includes(this.type)) {
             let methodSlug = ('paypal_smart' === this.type) ? 'paypal' : this.type.replace('-', '_');
             let key = 'payment_methods_wallets_' + methodSlug + '_title';
+            let keyDescription = 'payment_methods_wallets_' + methodSlug + '_description';
             title = this.configuration.widget_configuration.payment_methods.wallets[key];
+            description = this.configuration.widget_configuration.payment_methods.wallets[keyDescription];
         } else if (this.apims.includes(this.type)) {
             let methodSlug = ('zippay' === this.type) ? 'zip' : this.type.replace('-', '_');
             let key = 'payment_methods_alternative_payment_method_' + methodSlug + '_title';
+            let keyDescription = 'payment_methods_alternative_payment_method_' + methodSlug + '_description';
             title = this.configuration.widget_configuration.payment_methods.alternative_payment_methods[key];
+            description = this.configuration.widget_configuration.payment_methods.alternative_payment_methods[keyDescription];
+
         } else {
             title = paymentMethod.title
+        }
+        if(this.configuration.payment_methods[this.type]) {
+            this.configuration.payment_methods[this.type].description = description;
         }
         const methodName = document.createTextNode(title);
         const italicElement = document.createElement('i');
@@ -445,7 +453,7 @@ export default class PaydockCommercetoolWidget {
         if (this.widget !== null) return;
 
         if (this.type === 'bank_accounts') {
-            const bankAccount = new paydock.Configuration(configMethod.bank_accounts_gateway_id, 'bank_account');
+            const bankAccount = new paydock.Configuration('not_configured', 'bank_account');
 
             bankAccount.setFormFields(['account_routing', 'address_country', 'address_postcode', 'address_state', 'address_city', 'address_line1', 'address_line2', 'email']);
 
@@ -496,6 +504,7 @@ export default class PaydockCommercetoolWidget {
 
             if (configStyle.widget_style_custom_element !== undefined && configStyle.widget_style_custom_element.trim() !== "") {
                 let elementCustomStyles;
+                let widgetCustomStyles = configStyle.widget_style_custom_element;
                 elementCustomStyles = JSON.parse(widgetCustomStyles);
 
                 this.widget.setElementStyle('input', elementCustomStyles?.input);
@@ -733,8 +742,8 @@ export default class PaydockCommercetoolWidget {
         if ('apple-pay' === currentMethod.type) {
             paymentSource['wallet_type'] = 'apple';
         } else if ('afterpay_v2' === currentMethod.type) {
-            data['meta']['success_url'] = checkoutPage + '?afterpay=true&success=true&cart=' + reference;
-            data['meta']['error_url'] = checkoutPage + '?afterpay=true&success=false';
+            data['meta']['success_url'] = window.location.href + '?afterpay=true&success=true';
+            data['meta']['error_url'] = window.location.href + '?afterpay=true&success=false';
         }
 
         data['customer']['payment_source'] = paymentSource;
@@ -771,6 +780,10 @@ export default class PaydockCommercetoolWidget {
 
 
             let responseData = await response.json();
+            let paymentVersion = responseData?.version ?? null;
+            if(paymentVersion){
+                this.configuration.paymentVersion = paymentVersion;
+            }
             responseData = JSON.parse(responseData?.custom?.fields?.PaymentExtensionResponse);
 
             if (responseData.status === "Success" && responseData.token) {
@@ -852,6 +865,10 @@ export default class PaydockCommercetoolWidget {
             });
 
             let responseData = await response.json();
+            let paymentVersion = responseData?.version ?? null;
+            if(paymentVersion){
+                this.configuration.paymentVersion = paymentVersion;
+            }
             console.log(`get vault token RESPONSE: ${JSON.stringify(responseData)}`);
             responseData = responseData?.custom?.fields?.getVaultTokenResponse;
             if (responseData) {
@@ -1022,6 +1039,10 @@ export default class PaydockCommercetoolWidget {
             });
 
             let responseData = await response.json();
+            let paymentVersion = responseData?.version ?? null;
+            if(paymentVersion){
+                this.configuration.paymentVersion = paymentVersion;
+            }
             console.log(`get vault token RESPONSE: ${JSON.stringify(responseData)}`);
             responseData = responseData?.custom?.fields?.getStandalone3dsTokenResponse;
             if (responseData) {
@@ -1210,13 +1231,13 @@ export default class PaydockCommercetoolWidget {
     }
 }
 
-{/* 
+{/*
 <div id="widget"></div>
 <script src="https://api.paydock-commercetool-app.jetsoftpro.dev/paydock-commercetool-widget.js"></script>
 
 <script>
     const paydockCommercetoolsWidget = new PaydockCommercetoolsWidget('#widget', 'bank_accounts', 'userId'); // (selector, type, userId)
     paydockCommercetooslWidget.loadWidget();
-</script> 
+</script>
 */
 }
