@@ -56,9 +56,9 @@ export default class PaydockCommercetoolWidget {
         this.paymentId = configuration.paymentId;
         this.accessToken = null;
 
-        if('credentials' === this.configuration.api_credentials.credentials_type){
+        if ('credentials' === this.configuration.api_credentials.credentials_type) {
             this.accessToken = this.configuration.api_credentials.credentials_public_key
-        }else{
+        } else {
             this.accessToken = this.configuration.api_credentials.credentials_widget_access_key
         }
     }
@@ -121,6 +121,7 @@ export default class PaydockCommercetoolWidget {
 
         return result;
     }
+
     getMetaData(full = false) {
         const charge = {
             amount: this.amount,
@@ -183,6 +184,7 @@ export default class PaydockCommercetoolWidget {
         return meta;
 
     }
+
     afterpayError() {
 
     }
@@ -392,9 +394,11 @@ export default class PaydockCommercetoolWidget {
             description = this.configuration.widget_configuration.payment_methods.alternative_payment_methods[keyDescription];
 
         } else {
-            title = paymentMethod.title
+            title = paymentMethod.title;
+            description = paymentMethod.description;
+
         }
-        if(this.configuration.payment_methods[this.type]) {
+        if (this.configuration.payment_methods[this.type]) {
             this.configuration.payment_methods[this.type].description = description;
         }
         const methodName = document.createTextNode(title);
@@ -584,17 +588,59 @@ export default class PaydockCommercetoolWidget {
             case  'apple-pay':
                 widget = new paydock.WalletButtons(this.selector, this.preChargeWalletToken, {
                     amount_label: "Total",
-                    show_billing_address: true,
                     country: this.billingInfo.address_country,
                     wallets: ["apple"],
+                    request_shipping: true,
+                    show_billing_address: true,
+                    raw_data_initialization: {
+                        google: {
+                            type: "CARD",
+                            parameters: {
+                                allowedAuthMethods: ["PAN_ONLY", "CRYPTOGRAM_3DS"], // TODO evaluate "CRYPTOGRAM_3DS"
+                                allowedCardNetworks: [
+                                    "AMEX",
+                                    "DISCOVER",
+                                    "INTERAC",
+                                    "JCB",
+                                    "MASTERCARD",
+                                    "VISA",
+                                ],
+                                billingAddressRequired: true,
+                                billingAddressParameters: {
+                                    format: "FULL",
+                                },
+                            },
+                        },
+                    },
                 });
                 break;
             case  'google-pay':
                 widget = new paydock.WalletButtons(this.selector, this.preChargeWalletToken, {
                     amount_label: "Total",
-                    show_billing_address: true,
                     country: this.billingInfo.address_country,
                     wallets: ["google"],
+                    request_shipping: true,
+                    show_billing_address: true,
+                    raw_data_initialization: {
+                        google: {
+                            type: "CARD",
+                            parameters: {
+                                allowedAuthMethods: ["PAN_ONLY", "CRYPTOGRAM_3DS"], // TODO evaluate "CRYPTOGRAM_3DS"
+                                allowedCardNetworks: [
+                                    "AMEX",
+                                    "DISCOVER",
+                                    "INTERAC",
+                                    "JCB",
+                                    "MASTERCARD",
+                                    "VISA",
+                                ],
+                                billingAddressRequired: true,
+                                billingAddressParameters: {
+                                    format: "FULL",
+                                },
+                            },
+                        },
+                    },
                 });
                 break;
             case  'afterpay_v2':
@@ -609,7 +655,7 @@ export default class PaydockCommercetoolWidget {
             case  'paypal_smart':
                 widget = new paydock.WalletButtons(this.selector, this.preChargeWalletToken, {
                     request_shipping: true,
-                    pay_later: false,
+                    pay_later: "Enable" === this.configuration.payment_methods[this.type].config.wallets_paypal_smart_button_pay_later,
                     standalone: false,
                     country: this.billingInfo.address_country,
                 });
@@ -710,6 +756,7 @@ export default class PaydockCommercetoolWidget {
             amount: this.amount,
             reference: this.paymentId,
             currency: this.currency,
+            county: this?.billingInfo?.address_country,
             meta: {
                 store_name: "Commercetools",
             },
@@ -744,6 +791,8 @@ export default class PaydockCommercetoolWidget {
         } else if ('afterpay_v2' === currentMethod.type) {
             data['meta']['success_url'] = window.location.href + '?afterpay=true&success=true';
             data['meta']['error_url'] = window.location.href + '?afterpay=true&success=false';
+        } else if ('paypal_smart' === this.type) {
+            data['pay_later'] = "Enable" === currentMethod.config.wallets_paypal_smart_button_pay_later;
         }
 
         data['customer']['payment_source'] = paymentSource;
@@ -781,7 +830,7 @@ export default class PaydockCommercetoolWidget {
 
             let responseData = await response.json();
             let paymentVersion = responseData?.version ?? null;
-            if(paymentVersion){
+            if (paymentVersion) {
                 this.configuration.paymentVersion = paymentVersion;
             }
             responseData = JSON.parse(responseData?.custom?.fields?.PaymentExtensionResponse);
@@ -866,7 +915,7 @@ export default class PaydockCommercetoolWidget {
 
             let responseData = await response.json();
             let paymentVersion = responseData?.version ?? null;
-            if(paymentVersion){
+            if (paymentVersion) {
                 this.configuration.paymentVersion = paymentVersion;
             }
             console.log(`get vault token RESPONSE: ${JSON.stringify(responseData)}`);
@@ -1040,7 +1089,7 @@ export default class PaydockCommercetoolWidget {
 
             let responseData = await response.json();
             let paymentVersion = responseData?.version ?? null;
-            if(paymentVersion){
+            if (paymentVersion) {
                 this.configuration.paymentVersion = paymentVersion;
             }
             console.log(`get vault token RESPONSE: ${JSON.stringify(responseData)}`);

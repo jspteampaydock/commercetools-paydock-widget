@@ -233,7 +233,29 @@
 }
 .paydock-widget_head label i {
     font-weight: 500;
+    position: relative;
+    padding-right: 72px;
 }
+.paydock-widget_head label i:after {
+    content: '';
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    right: 0;
+    margin: auto;
+    width: 72px;
+    height: 18px;
+    background-repeat: no-repeat;
+  }
+  #paydockAPMsAfterpayButton,
+  #paydockAPMsZipButton {
+    width: 150px;
+    height: 55px;
+    margin: 0 auto;
+    background-repeat: no-repeat;
+    background-position: 0 0;
+    background-size: 100%;
+  }
 .paydock-widget_body .method-description {
     font-weight: 400;
 }

@@ -8,7 +8,7 @@
     "payments",
     "components"
   ],
-  "version": "2.0.26",
+  "version": "2.0.32",
   "description": "Widget for create payment methods",
   "main": "dist/widget.js",
   "files": [
